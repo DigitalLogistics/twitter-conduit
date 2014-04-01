@@ -10,6 +10,7 @@ module Main where
 import Web.Scotty
 import qualified Network.HTTP.Types as HT
 import Web.Twitter.Conduit hiding (text)
+import qualified Web.Twitter.Conduit.Api as TwConduit
 import Web.Authenticate.OAuth (OAuth(..), Credential(..))
 import qualified Web.Authenticate.OAuth as OA
 import qualified Network.HTTP.Conduit as HTTP
@@ -20,12 +21,16 @@ import qualified Data.Map as M
 import Data.Maybe
 import Data.Monoid
 import Data.IORef
+import Control.Monad (mapM_)
+import Control.Monad.Logger (runStdoutLoggingT)
 import Control.Monad.IO.Class
 import System.Environment
 import System.IO.Unsafe
 
+import Data.Default
+
 callback :: String
-callback = "http://localhost:3000/callback"
+callback = "https://localhost:3000/callback"
 
 getTokens :: IO OAuth
 getTokens = do
@@ -56,8 +61,19 @@ storeCredential k cred ioref =
 main :: IO ()
 main = do
     tokens <- getTokens
-    putStrLn $ "browse URL: http://localhost:3000/signIn"
+    --print tokens
+    cred <- HTTP.withManager $ OA.getTemporaryCredential tokens
+    mapM_ print (unCredential cred)
+    putStrLn "--------------------------------------------------"
+    putStrLn "browse URL: http://localhost:3000/signIn"
     scotty 3000 $ app tokens
+
+
+--getUser :: MonadIO m => TWInfo -> String -> m User
+getUser twInfo =
+  runStdoutLoggingT . runTW twInfo $ call TwConduit.accountVerifyCredentials
+
+--verify = api POST "account/verify_credentials.json"
 
 makeMessage :: OAuth -> Credential -> S.ByteString
 makeMessage tokens (Credential cred) =
@@ -78,7 +94,9 @@ app tokens = do
             Just cred -> do
                 accessTokens <- liftIO $ HTTP.withManager $ OA.getAccessToken tokens (OA.insert "oauth_verifier" oauthVerifier cred)
                 liftIO $ print accessTokens
-
+                let twInfo = setCredential tokens accessTokens def
+                user <- liftIO $ getUser twInfo
+                liftIO $ print user
                 let message = makeMessage tokens accessTokens
                 liftIO . S8.putStrLn $ message
                 text . LT.pack . S8.unpack $ message

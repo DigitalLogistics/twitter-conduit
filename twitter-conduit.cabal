@@ -158,9 +158,11 @@ executable oauth_callback
     build-depends:
         base >= 4.0 && < 5
       , containers
+      , data-default
       , transformers-base
       , transformers
       , monad-control
+      , monad-logger
       , bytestring
       , text
       , resourcet
